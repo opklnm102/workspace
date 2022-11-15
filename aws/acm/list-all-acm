@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# Dependencies:
+#   brew install awscli jq
+#
+# Setup:
+#   chmod 700 ./this-shell
+#
+# Usage:
+#   ./this-shell
+
+set -e
+
+# read ACM(AWS Certificate Manager)
+for certificate_arn in $(aws acm list-certificates | jq -r '.CertificateSummaryList | .[].CertificateArn'); do
+  echo -e "---------------------------------\n"
+  certificate=$(aws acm describe-certificate --certificate-arn "${certificate_arn}" | jq .Certificate)
+
+  echo "certificate arn: $(echo "${certificate}" | jq '.CertificateArn')"
+  echo "domain name: $(echo "${certificate}" | jq '.DomainName')"
+  echo "subject alternative names: $(echo "${certificate}" | jq '.SubjectAlternativeNames')"
+  echo "start date: $(echo "${certificate}" | jq '.NotBefore')"
+  echo "expiration date: $(echo "${certificate}" | jq '.NotAfter')"
+  echo "domain validation options: $(echo "${certificate}" | jq '.DomainValidationOptions')"
+  echo "in use by: $(echo "${certificate}" | jq '.InUseBy')"
+done

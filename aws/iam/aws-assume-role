@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Dependencies:
+#   brew install awscli jq
+#
+# Setup:
+#   chmod 700 ./this-shell
+
+set -e
+
+usage() {
+  cat <<-EOM
+Usage: ${0##*/} [IAM User name] [IAM Role name] [MFA token code]
+EOM
+  exit 1
+}
+
+if [[ $# -lt 3 ]]; then
+  usage
+fi
+
+# FIXME: replace account
+iam_user_name=${1}
+serial_number="arn:aws:iam::<account>:mfa/${iam_user_name}"
+iam_role_name=${2}
+iam_role_arn="arn:aws:iam::<account>:role/${iam_role_name}"
+token_code=${3}
+
+# backup IAM User access key
+if [[ ! (-f $HOME/.aws/credentials.${iam_user_name}) ]]; then
+  cat $HOME/.aws/credentials | grep "default" -A 2 > $HOME/.aws/credentials.${iam_user_name}
+fi
+
+# MFA session
+export AWS_ACCESS_KEY_ID=$(cat $HOME/.aws/credentials."${iam_user_name}" | grep 'aws_access_key_id' | awk '{print $3}')
+export AWS_SECRET_ACCESS_KEY=$(cat $HOME/.aws/credentials."${iam_user_name}" | grep 'aws_secret_access_key' | awk '{print $3}')
+
+mfa_session=$(aws sts get-session-token --serial-number ${serial_number} \
+                                        --token-code ${token_code})
+
+export AWS_ACCESS_KEY_ID=$(echo "${mfa_session}" | jq -r .Credentials.AccessKeyId)
+export AWS_SECRET_ACCESS_KEY=$(echo "${mfa_session}" | jq -r .Credentials.SecretAccessKey)
+export AWS_SESSION_TOKEN=$(echo "${mfa_session}" | jq -r .Credentials.SessionToken)
+
+# assume role
+# FIXME: replace account, IAM Role name
+assume_role=$(aws sts assume-role --role-arn "${iam_role_arn}" \
+                                  --role-session-name "${iam_role_name}")
+
+# config
+echo -e "[default]\noutput=json\nregion=ap-northeast-1" > $HOME/.aws/config
+
+# credentials
+echo "[default]" > $HOME/.aws/credentials
+echo "${assume_role}" | jq -r '.Credentials | .["aws_access_key_id"]=.AccessKeyId | .["aws_secret_access_key"]=.SecretAccessKey | .["aws_session_token"]=.SessionToken | del(.AccessKeyId,.SecretAccessKey,.SessionToken,.Expiration) | to_entries[] | "\(.key)=\(.value)"' >> $HOME/.aws/credentials

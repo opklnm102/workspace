@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# Dependencies:
+#   brew install awscli jq
+#
+# Setup:
+#   chmod 700 ./this-shell
+#
+# Usage:
+#   ./this-shell [AWS IAM User name] [AWS IAM Role name] [MFA token code]
+
+set -o pipefail
+
+usage() {
+cat <<-EOM
+Usage: ${0##*/} [VPC ID]
+EOM
+  exit 1
+}
+
+if [[ -z "${1}" ]]; then
+  usage
+fi
+
+vpc="${1}"
+echo "${vpc}"
+
+echo "internet gateways"
+aws ec2 describe-internet-gateways --filters 'Name=attachment.vpc-id,Values='"${vpc}" | jq . | grep InternetGatewayId
+
+echo "subnets"
+aws ec2 describe-subnets --filters 'Name=vpc-id,Values='"${vpc}" | grep SubnetId
+
+echo "route tables"
+aws ec2 describe-route-tables --filters 'Name=vpc-id,Values='"${vpc}" | grep RouteTableId
+
+echo "network acls"
+aws ec2 describe-network-acls --filters 'Name=vpc-id,Values='"${vpc}" | grep NetworkAclId
+
+echo "vpc peering connections"
+aws ec2 describe-vpc-peering-connections --filters 'Name=requester-vpc-info.vpc-id,Values='"${vpc}" | grep VpcPeeringConnectionId
+
+echo "vpc endpoints"
+aws ec2 describe-vpc-endpoints --filters 'Name=vpc-id,Values='"${vpc}" | grep VpcEndpointId
+
+echo "nat gateways"
+aws ec2 describe-nat-gateways --filter 'Name=vpc-id,Values='"${vpc}" | grep NatGatewayId
+
+echo "security groups"
+aws ec2 describe-security-groups --filters 'Name=vpc-id,Values='"${vpc}" | grep GroupId
+
+echo "instnaces"
+aws ec2 describe-instances --filters 'Name=vpc-id,Values='"${vpc}" | grep InstanceId
+
+echo "vpn gateways"
+aws ec2 describe-vpn-gateways --filters 'Name=attachment.vpc-id,Values='"${vpc}" | grep VpnGatewayId
+
+echo "network interfaces"
+aws ec2 describe-network-interfaces --filters 'Name=vpc-id,Values='"${vpc}" | grep NetworkInterfaceId
+

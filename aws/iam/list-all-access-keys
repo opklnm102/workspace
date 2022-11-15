@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+for user in $(aws iam list-users | jq -r '.Users[].UserName'); do
+  echo "--------------------"
+  echo "User Name: ${user}"
+  
+  access_key_metadata=$(aws iam list-access-keys --user-name "${user}" | jq -r '.AccessKeyMetadata[]')
+  echo "${access_key_metadata}" | jq '.AccessKeyId'
+
+  for access_key_id in $(echo "${access_key_metadata}" | jq -r '.AccessKeyId'); do
+    echo "Access Key ID: ${access_key_id}"
+    echo "status: $(echo "${access_key_metadata}" | jq '.Status')"
+    echo "create date: $(echo "${access_key_metadata}" | jq '.CreateDate')"
+ 
+    access_key_last_used=$(aws iam get-access-key-last-used --access-key-id "${access_key_id}" | jq '.AccessKeyLastUsed')
+    echo "last used date: $(echo "${access_key_last_used}" | jq '.LastUsedDate')"
+    echo "service name: $(echo "${access_key_last_used}" | jq '.ServiceName')"
+    echo "region: $(echo "${access_key_last_used}" | jq '.Region')"
+  done
+done

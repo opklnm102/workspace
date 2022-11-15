@@ -1,0 +1,10 @@
+#!/bin/bash
+
+
+while read region; do
+  echo "${region}"
+  aws ec2 describe-vpcs --region "${region}" | jq -r '.Vpcs[].VpcId'
+  echo "--------------------------------------"
+  echo ""
+done < <(aws ec2 describe-regions | jq -r '.Regions[].RegionName')
+

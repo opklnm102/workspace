@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#
+# Dependencies
+#   brew install awscli
+#
+# Setup:
+#   chmod 700 ./this-shell
+#
+# Usage:
+#   ./this-shell [EC2 private dns name]
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+fail() {
+  echo "ERROR: ${*}"
+  exit 2
+}
+
+usage() {
+  cat <<-EOM
+Usage: ${0##*/} [EC2 private dns name]
+e.g. ${0##*/} ip-10-x-x-x.ap-xxxx.compute.internal
+EOM
+  exit 1
+}
+
+# Validate the number of command line arguments
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+# Validate that this workstation has access to the required executables
+command -v aws >/dev/null || fail "awscli is not installed!"
+
+
+readonly private_dns="$1"
+echo "EC2 Private DNS: ${private_dns}"
+
+readonly instance_id=$(aws ec2 describe-instances --filters "Name=private-dns-name,Values=${private_dns}" --query 'Reservations[*].Instances[*].[InstanceId]' --output text)
+
+echo "start session instance id: ${instance_id}"
+aws ssm start-session --target "${instance_id}"
