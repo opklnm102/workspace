@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+usage() {
+  cat <<-EOM
+Usage: ${0##*/} [maintenance mode]
+e.g. ${0##*/} (restart, shutdown, start)
+EOM
+  exit 0
+}
+
+if [[ $# != 1 ]]; then
+  usage
+fi
+
+echo -n "Are you really run? (yes or no): "
+read -r CONFIRM
+
+if [ ! "${CONFIRM}" == "yes" ]; then
+  echo "Exit..."
+  exit 0
+fi
+
+maintenance_mode=${1}
+
+if [ "${maintenance_mode}" = "restart" ]; then
+  for namespace in $(kubectl get ns -o=jsonpath='{.items[*].metadata.name}'); do
+    echo "${namespace}"
+    kubectl rollout restart deployment -n "${namespace}" -l maintenance=db
+  done
+fi
+
+if [ "${maintenance_mode}" = "shutdown" ]; then
+  for namespace in $(kubectl get ns -o=jsonpath='{.items[*].metadata.name}'); do
+    echo "${namespace}"
+    for deployment in $(kubectl get deployment -n "${namespace}" -l maintenance=db -o name); do
+      replica=$(kubectl get "${deployment}" -o=jsonpath='{.spec.replicas}' -n "${namespace}")
+      echo "${deployment} ${replica}" >> backup-shutdown-replica
+      kubectl scale -n "${namespace}" --replicas=0 "${deployment}"
+    done
+  done
+fi
+
+if [ "${maintenance_mode}" = "start" ]; then
+  for namespace in $(kubectl get ns -o=jsonpath='{.items[*].metadata.name}'); do
+    echo "${namespace}"
+    for deployment in $(kubectl get deployment -n "${namespace}" -l maintenance=db -o name); do
+      replica=$(grep "${deployment}" backup-shutdown-replica | awk '{print $2}')
+      kubectl scale -n "${namespace}" --replicas="${replica}" "${deployment}"
+    done
+  done
+  rm backup-shutdown-replica
+fi
+
+echo "Done..."
