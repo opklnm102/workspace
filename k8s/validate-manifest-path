@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# 해당 script로 kubectl wrapping하면 원하는 path의 manifest만 사용할 수 있게 제한할 수 있다
+
+THIS_PATH="$(pwd -P)"
+SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
+
+ARGS=( "$@" )
+YAML_PATH=""
+
+function check_yaml_file() {
+  TARGET_FILE=$1
+
+  cd `dirname $TARGET_FILE`
+  TARGET_FILE=`basename $TARGET_FILE`
+
+  while [ -L "$TARGET_FILE" ]; do
+    TARGET_FILE=`readlink $TARGET_FILE`
+    cd `dirname $TARGET_FILE`
+    TARGET_FILE=`basename $TARGET_FILE`
+  done
+
+  PHYS_DIR=`pwd -P`
+  YAML_PATH=$PHYS_DIR/$TARGET_FILE
+}
+
+for arg in "${ARGS[@]}"; do
+  if [[ $arg == *".yaml"* ]]; then
+    check_yaml_file $arg
+    if [[ $YAML_PATH != *"dev"* ]]; then
+      echo "YAML file is not part of the dev area : $YAML_PATH"
+      exit -1
+    fi
+  fi
+done
+
+cd $THIS_PATH
+
+$SCRIPT_PATH/kubectl $@
