@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#
+# Dependencies:
+#   brew install curl jq
+#
+# Setup:
+#   chmod 700 ./this-shell
+#
+# Usage:
+#   ./this-shell
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+TAG_KEY="Name"
+TAG_VALUE="Temp"
+
+MAC=$(curl --silent http://169.254.169.254/latest/meta-data/mac)
+VPC_ID=$(curl --silent http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/vpc-id)
+
+aws ec2 describe-security-groups | jq ".SecurityGroups[] | select(contains({Tags: [{Key: \"${TAG_KEY}\", Value: \"${TAG_VALUE}\"}], VpcId: \"${VPC_ID}\" })) | .GroupId" \| tr -d '"' | while read -r GroupId; do
+  echo "GroupId: ${GroupId}"
+
+  IP_PERMISSIONS=$(aws ec2 describe-security-groups --filters "Name=group-id,Values=${GroupId}" | jq '.SecurityGroups[] | .IpPermissions')
+
+  if [[ -n "${IP_PERMISSIONS}" && "${IP_PERMISSIONS}" != "[]" ]]; then
+    aws ec2 revoke-security-group-ingress --group-id "${GroupId}" --ip-permissions "${IP_PERMISSIONS}"
+  fi
+done

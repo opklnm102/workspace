@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+CPU_CREDITS_WARN=50 # in percents
+
+# https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/t2-credits-baseline-concepts.html
+instance_type_max_cpu_credits_t2_nano=72
+instance_type_max_cpu_credits_t2_micro=144
+instance_type_max_cpu_credits_t2_small=288
+instance_type_max_cpu_credits_t2_medium=576
+instance_type_max_cpu_credits_t2_large=864
+instance_type_max_cpu_credits_t2_xlarge=1296
+instance_type_max_cpu_credits_t2_2xlarge=1944
+
+metadata="$(curl -sL http://169.254.169.254/latest/dynamic/instance-identity/document)"
+region=$(echo "$metadata" | jq -r .region)
+instance_id=$(echo "$metadata" | jq -r .instanceId)
+instance_type=$(echo "$metadata" | jq -r .instanceType)
+
+start_time=$(date -u -d "10 minutes ago" +%Y-%m-%dT%H:%M:%S)
+end_time=$(date -u +%Y-%m-%dT%H:%M:%S)
+
+cpu_credits_metadata=$(
+    aws cloudwatch get-metric-statistics \
+        --namespace AWS/EC2 \
+        --region ${region} \
+        --metric-name CPUCreditBalance \
+        --start-time "${start_time}" \
+        --end-time "${end_time}" \
+        --period 60 \
+        --statistics Average \
+        --dimensions Name=InstanceId,Value="${instance_id}" \
+    | jq -r '.Datapoints[] | .["Average", "Timestamp"]' | tail -n 2
+)
+
+cpu_credits_value=$(echo "$cpu_credits_metadata" | head -n 1)
+cpu_credits_ts=$(echo "$cpu_credits_metadata" | tail -n 1)
+cpu_credits_max_var=instance_type_max_cpu_credits_${instance_type/./_}
+cpu_credits_max=${!cpu_credits_max_var}
+cpu_credits_ratio=$(echo "$cpu_credits_value / $cpu_credits_max * 100" | bc -l)
+cpu_credits_warn=$(echo "$cpu_credits_ratio <= $CPU_CREDITS_WARN" | bc -l)
+
+echo "Instance ID: $instance_id"
+echo "Instance Type: $instance_type"
+echo "Region ID: $region"
+echo "Timestamp: $cpu_credits_ts"
+echo "CPU Credits: $(printf %.0f $cpu_credits_value) / $(printf %.0f $cpu_credits_max) ($(printf %.0f $cpu_credits_ratio)%)"
+
+exit $cpu_credits_warn
